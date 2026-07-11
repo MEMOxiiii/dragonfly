@@ -569,6 +569,10 @@ func (s *Session) playSound(pos mgl64.Vec3, t world.Sound, disableRelative bool)
 			EventType: packet.LevelEventScrape,
 			Position:  vec64To32(pos),
 		})
+	case sound.CopperBulbTurnOn:
+		pk.SoundType, pk.ExtraData = packet.SoundEventCopperBulbTurnOn, int32(s.br.BlockRuntimeID(so.Block))
+	case sound.CopperBulbTurnOff:
+		pk.SoundType, pk.ExtraData = packet.SoundEventCopperBulbTurnOff, int32(s.br.BlockRuntimeID(so.Block))
 	case sound.Pop:
 		s.writePacket(&packet.LevelEvent{
 			EventType: packet.LevelEventSoundInfinityArrowPickup,

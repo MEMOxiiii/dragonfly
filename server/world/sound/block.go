@@ -206,6 +206,22 @@ type WaxRemoved struct{ sound }
 // CopperScraped is a sound played when a player scrapes a copper block to reduce its oxidation level.
 type CopperScraped struct{ sound }
 
+// CopperBulbTurnOn is a sound played when a copper bulb lights up after receiving a redstone pulse.
+type CopperBulbTurnOn struct {
+	// Block is the copper bulb block for which a sound should be played.
+	Block world.Block
+
+	sound
+}
+
+// CopperBulbTurnOff is a sound played when a copper bulb turns dark after receiving a redstone pulse.
+type CopperBulbTurnOff struct {
+	// Block is the copper bulb block for which a sound should be played.
+	Block world.Block
+
+	sound
+}
+
 // DecoratedPotInserted is a sound played when an item is successfully inserted into a decorated pot.
 type DecoratedPotInserted struct {
 	sound

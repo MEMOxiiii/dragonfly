@@ -35,6 +35,8 @@ const (
 	hashCarrot
 	hashChest
 	hashChiseledQuartz
+	hashCinnabar
+	hashCinnabarBricks
 	hashClay
 	hashCoal
 	hashCoalOre
@@ -46,6 +48,7 @@ const (
 	hashConcretePowder
 	hashCopper
 	hashCopperBars
+	hashCopperBulb
 	hashCopperChain
 	hashCopperDoor
 	hashCopperGolemStatue
@@ -97,6 +100,7 @@ const (
 	hashGravel
 	hashGrindstone
 	hashHayBale
+	hashHoneyBlock
 	hashHoneycomb
 	hashHopper
 	hashInfestedCobblestone
@@ -107,7 +111,9 @@ const (
 	hashIron
 	hashIronBars
 	hashIronChain
+	hashIronDoor
 	hashIronOre
+	hashIronTrapdoor
 	hashItemFrame
 	hashJukebox
 	hashKelp
@@ -148,6 +154,8 @@ const (
 	hashPlanks
 	hashPodzol
 	hashPolishedBlackstoneBrick
+	hashPolishedCinnabar
+	hashPolishedSulfur
 	hashPolishedTuff
 	hashPortal
 	hashPotato
@@ -196,8 +204,11 @@ const (
 	hashStonecutter
 	hashString
 	hashSugarCane
+	hashSulfur
+	hashSulfurBricks
 	hashTNT
 	hashTerracotta
+	hashTintedGlass
 	hashTorch
 	hashTuff
 	hashTuffBricks
@@ -343,6 +354,14 @@ func (ChiseledQuartz) Hash() (uint64, uint64) {
 	return hashChiseledQuartz, 0
 }
 
+func (c Cinnabar) Hash() (uint64, uint64) {
+	return hashCinnabar, uint64(boolByte(c.Chiseled))
+}
+
+func (CinnabarBricks) Hash() (uint64, uint64) {
+	return hashCinnabarBricks, 0
+}
+
 func (Clay) Hash() (uint64, uint64) {
 	return hashClay, 0
 }
@@ -385,6 +404,10 @@ func (c Copper) Hash() (uint64, uint64) {
 
 func (c CopperBars) Hash() (uint64, uint64) {
 	return hashCopperBars, uint64(c.Oxidation.Uint8()) | uint64(boolByte(c.Waxed))<<2
+}
+
+func (c CopperBulb) Hash() (uint64, uint64) {
+	return hashCopperBulb, uint64(c.Oxidation.Uint8()) | uint64(boolByte(c.Waxed))<<2 | uint64(boolByte(c.Lit))<<3 | uint64(boolByte(c.Powered))<<4
 }
 
 func (c CopperChain) Hash() (uint64, uint64) {
@@ -591,6 +614,10 @@ func (h HayBale) Hash() (uint64, uint64) {
 	return hashHayBale, uint64(h.Axis)
 }
 
+func (HoneyBlock) Hash() (uint64, uint64) {
+	return hashHoneyBlock, 0
+}
+
 func (Honeycomb) Hash() (uint64, uint64) {
 	return hashHoneycomb, 0
 }
@@ -631,8 +658,16 @@ func (c IronChain) Hash() (uint64, uint64) {
 	return hashIronChain, uint64(c.Axis)
 }
 
+func (d IronDoor) Hash() (uint64, uint64) {
+	return hashIronDoor, uint64(d.Facing) | uint64(boolByte(d.Open))<<2 | uint64(boolByte(d.Top))<<3 | uint64(boolByte(d.Right))<<4
+}
+
 func (i IronOre) Hash() (uint64, uint64) {
 	return hashIronOre, uint64(i.Type.Uint8())
+}
+
+func (t IronTrapdoor) Hash() (uint64, uint64) {
+	return hashIronTrapdoor, uint64(t.Facing) | uint64(boolByte(t.Open))<<2 | uint64(boolByte(t.Top))<<3
 }
 
 func (i ItemFrame) Hash() (uint64, uint64) {
@@ -793,6 +828,14 @@ func (Podzol) Hash() (uint64, uint64) {
 
 func (b PolishedBlackstoneBrick) Hash() (uint64, uint64) {
 	return hashPolishedBlackstoneBrick, uint64(boolByte(b.Cracked))
+}
+
+func (PolishedCinnabar) Hash() (uint64, uint64) {
+	return hashPolishedCinnabar, 0
+}
+
+func (PolishedSulfur) Hash() (uint64, uint64) {
+	return hashPolishedSulfur, 0
 }
 
 func (PolishedTuff) Hash() (uint64, uint64) {
@@ -987,12 +1030,24 @@ func (c SugarCane) Hash() (uint64, uint64) {
 	return hashSugarCane, uint64(c.Age)
 }
 
+func (s Sulfur) Hash() (uint64, uint64) {
+	return hashSulfur, uint64(boolByte(s.Chiseled))
+}
+
+func (SulfurBricks) Hash() (uint64, uint64) {
+	return hashSulfurBricks, 0
+}
+
 func (TNT) Hash() (uint64, uint64) {
 	return hashTNT, 0
 }
 
 func (Terracotta) Hash() (uint64, uint64) {
 	return hashTerracotta, 0
+}
+
+func (TintedGlass) Hash() (uint64, uint64) {
+	return hashTintedGlass, 0
 }
 
 func (t Torch) Hash() (uint64, uint64) {
