@@ -504,6 +504,8 @@ type EntityRegistryConfig struct {
 	Snowball           func(opts EntitySpawnOpts, owner Entity) *EntityHandle
 	SplashPotion       func(opts EntitySpawnOpts, t any, owner Entity) *EntityHandle
 	Lightning          func(opts EntitySpawnOpts) *EntityHandle
+	FishingBobber      func(opts EntitySpawnOpts, owner Entity, lure, luckOfTheSea int) *EntityHandle
+	ExperienceOrbs     func(pos mgl64.Vec3, amount int) []*EntityHandle
 }
 
 // ArrowSpawnConfig holds the options used to spawn an arrow entity.
