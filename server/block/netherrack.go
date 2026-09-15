@@ -1,6 +1,10 @@
 package block
 
 import (
+	"math/rand/v2"
+	"slices"
+
+	"github.com/df-mc/dragonfly/server/block/cube"
 	"github.com/df-mc/dragonfly/server/item"
 	"github.com/df-mc/dragonfly/server/world"
 )
@@ -15,6 +19,22 @@ type Netherrack struct {
 func (n Netherrack) SoilFor(block world.Block) bool {
 	flower, ok := block.(Flower)
 	return ok && flower.Type == WitherRose()
+}
+
+// BoneMeal converts the netherrack into nylium of a type found on one of its neighbouring blocks, picking one
+// of the two types at random if both are present.
+func (n Netherrack) BoneMeal(pos cube.Pos, tx *world.Tx) item.BoneMealResult {
+	var types []Nylium
+	for _, f := range cube.Faces() {
+		if nylium, ok := tx.Block(pos.Side(f)).(Nylium); ok && !slices.Contains(types, nylium) {
+			types = append(types, nylium)
+		}
+	}
+	if len(types) == 0 {
+		return item.BoneMealResultNone
+	}
+	tx.SetBlock(pos, types[rand.IntN(len(types))], nil)
+	return item.BoneMealResultSmall
 }
 
 // BreakInfo ...

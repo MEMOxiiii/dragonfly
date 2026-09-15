@@ -1,6 +1,9 @@
 package block
 
 import (
+	"math/rand/v2"
+
+	"github.com/df-mc/dragonfly/server/block/cube"
 	"github.com/df-mc/dragonfly/server/world"
 )
 
@@ -57,6 +60,40 @@ func (d Dirt) EncodeBlock() (string, map[string]any) {
 		return "minecraft:coarse_dirt", nil
 	}
 	return "minecraft:dirt", nil
+}
+
+// spreadDirt turns the block passed into dirt if the light above it is too low, and otherwise attempts to
+// spread it onto nearby dirt blocks. It is the random tick behaviour shared by grass blocks and mycelium.
+func spreadDirt(b world.Block, pos cube.Pos, tx *world.Tx, r *rand.Rand) {
+	aboveLight := tx.Light(pos.Side(cube.FaceUp))
+	if aboveLight < 4 {
+		// The light above the block is too low: The block turns to dirt.
+		tx.SetBlock(pos, Dirt{}, nil)
+		return
+	}
+	if aboveLight < 9 {
+		// Don't attempt to spread if the light level is lower than 9.
+		return
+	}
+
+	// Generate a single uint32 as we only need 28 bits (7 bits each iteration).
+	n := r.Uint32()
+
+	// Four attempts to spread to another block.
+	for i := 0; i < 4; i++ {
+		x, y, z := int(n)%3, int(n>>2)%5, int(n>>5)%3
+		n >>= 7
+
+		spreadPos := pos.Add(cube.Pos{x - 1, y - 3, z - 1})
+		// Don't spread to locations where dirt is exposed to hardly any light.
+		if tx.Light(spreadPos.Side(cube.FaceUp)) < 4 {
+			continue
+		}
+		if dirt, ok := tx.Block(spreadPos).(Dirt); !ok || dirt.Coarse {
+			continue
+		}
+		tx.SetBlock(spreadPos, b, nil)
+	}
 }
 
 // supportsVegetation checks if the vegetation can exist on the block.

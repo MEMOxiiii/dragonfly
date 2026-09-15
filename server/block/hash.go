@@ -138,6 +138,7 @@ const (
 	hashMud
 	hashMudBricks
 	hashMuddyMangroveRoots
+	hashMycelium
 	hashNetherBrickFence
 	hashNetherBricks
 	hashNetherGoldOre
@@ -148,6 +149,7 @@ const (
 	hashNetherite
 	hashNetherrack
 	hashNote
+	hashNylium
 	hashObsidian
 	hashPackedIce
 	hashPackedMud
@@ -178,6 +180,7 @@ const (
 	hashReinforcedDeepslate
 	hashResin
 	hashResinBricks
+	hashRootedDirt
 	hashSand
 	hashSandstone
 	hashSeaLantern
@@ -779,6 +782,10 @@ func (m MuddyMangroveRoots) Hash() (uint64, uint64) {
 	return hashMuddyMangroveRoots, uint64(m.Axis)
 }
 
+func (Mycelium) Hash() (uint64, uint64) {
+	return hashMycelium, 0
+}
+
 func (NetherBrickFence) Hash() (uint64, uint64) {
 	return hashNetherBrickFence, 0
 }
@@ -817,6 +824,10 @@ func (Netherrack) Hash() (uint64, uint64) {
 
 func (Note) Hash() (uint64, uint64) {
 	return hashNote, 0
+}
+
+func (n Nylium) Hash() (uint64, uint64) {
+	return hashNylium, uint64(boolByte(n.Warped))
 }
 
 func (o Obsidian) Hash() (uint64, uint64) {
@@ -937,6 +948,10 @@ func (Resin) Hash() (uint64, uint64) {
 
 func (r ResinBricks) Hash() (uint64, uint64) {
 	return hashResinBricks, uint64(boolByte(r.Chiseled))
+}
+
+func (RootedDirt) Hash() (uint64, uint64) {
+	return hashRootedDirt, 0
 }
 
 func (s Sand) Hash() (uint64, uint64) {
