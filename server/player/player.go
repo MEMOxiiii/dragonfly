@@ -1902,7 +1902,9 @@ func (p *Player) AttackEntity(e world.Entity) bool {
 			p.SetHeldItems(p.damageItem(i, durable.DurabilityInfo().AttackDurability), left)
 		}
 		n, vulnerable, _ := entity.HurtEntity(e, i.AttackDamage(), entity.AttackDamageSource{Attacker: p})
-		p.tx.PlaySound(entity.EyePosition(e), sound.Attack{Damage: !mgl64.FloatEqual(n, 0)})
+		if _, ok := e.(*entity.Cushion); !ok {
+			p.tx.PlaySound(entity.EyePosition(e), sound.Attack{Damage: !mgl64.FloatEqual(n, 0)})
+		}
 		if vulnerable {
 			p.Exhaust(0.1)
 		}

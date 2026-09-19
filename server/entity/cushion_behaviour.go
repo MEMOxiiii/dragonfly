@@ -130,19 +130,19 @@ func (b *cushionBehaviour) destroy(e *Ent, tx *world.Tx, drop bool) {
 	if b.removed {
 		return
 	}
-	pos := e.Position()
+	pos, name := e.Position(), e.NameTag()
 	centre := pos.Add(mgl64.Vec3{0, cushionHeight / 2, 0})
 	tx.AddParticle(centre, particle.BlockBreakNoSound{Block: block.Wool{Colour: b.colour}})
-	tx.PlaySound(centre, sound.CushionBreak{})
+	b.remove(e, tx)
 	if drop {
 		stack := item.NewStack(item.Cushion{Colour: b.colour}, 1)
-		if name := e.NameTag(); name != "" {
+		if name != "" {
 			stack = stack.WithCustomName(name)
 		}
 		vel := mgl64.Vec3{rand.Float64()*0.2 - 0.1, 0.2, rand.Float64()*0.2 - 0.1}
 		tx.AddEntity(NewItem(world.EntitySpawnOpts{Position: pos, Velocity: vel}, stack))
 	}
-	b.remove(e, tx)
+	tx.PlaySound(centre, sound.CushionBreak{})
 }
 
 // remove gets the rider off and removes the cushion from the world.
