@@ -1828,6 +1828,13 @@ func (p *Player) UseItemOnEntity(e world.Entity) bool {
 		return false
 	}
 	i, left := p.HeldItems()
+	if interactable, ok := e.(entity.Interactable); ok && interactable.Interact(p, i) {
+		p.SwingArm()
+		if !p.GameMode().CreativeInventory() {
+			p.SetHeldItems(p.subtractItem(i, 1), left)
+		}
+		return true
+	}
 	usable, ok := i.Item().(item.UsableOnEntity)
 	if !ok {
 		return true

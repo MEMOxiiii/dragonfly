@@ -2,6 +2,7 @@ package entity
 
 import (
 	"github.com/df-mc/dragonfly/server/block/cube"
+	"github.com/df-mc/dragonfly/server/block/model"
 	"github.com/df-mc/dragonfly/server/world"
 	"github.com/go-gl/mathgl/mgl64"
 	"math"
@@ -14,6 +15,7 @@ type MovementComputer struct {
 	DragBeforeGravity bool
 
 	onGround bool
+	boxes    []cube.BBox
 }
 
 // Movement represents the movement of a world.Entity as a result of a call to MovementComputer.TickMovement. The
@@ -83,6 +85,10 @@ func (c *MovementComputer) OnGround() bool {
 // zeroVec3 is a mgl64.Vec3 with zero values.
 var zeroVec3 mgl64.Vec3
 
+// fullBlock is the BBox of a solid block, used to skip the allocation that
+// asking a solid block for its BBox would make.
+var fullBlock = cube.Box(0, 0, 0, 1, 1, 1)
+
 // epsilon is the epsilon used for thresholds for change used for change in position and velocity.
 const epsilon = 0.001
 
@@ -124,7 +130,7 @@ func (c *MovementComputer) CheckCollision(tx *world.Tx, e world.Entity, pos, vel
 
 	// Entities only ever have a single bounding box.
 	entityBBox := e.H().Type().BBox(e).Translate(pos)
-	blocks := blockBBoxsAround(tx, entityBBox.Extend(vel))
+	blocks := c.blockBBoxsAround(tx, entityBBox.Extend(vel))
 
 	if !mgl64.FloatEqualThreshold(deltaY, 0, epsilon) {
 		// First we move the entity BBox on the Y axis.
@@ -169,8 +175,8 @@ func (c *MovementComputer) CheckCollision(tx *world.Tx, e world.Entity, pos, vel
 }
 
 // blockBBoxsAround returns all blocks around the entity passed, using the BBox passed to make a prediction of
-// what blocks need to have their BBox returned.
-func blockBBoxsAround(tx *world.Tx, box cube.BBox) []cube.BBox {
+// what blocks need to have their BBox returned. The slice returned is reused between calls.
+func (c *MovementComputer) blockBBoxsAround(tx *world.Tx, box cube.BBox) []cube.BBox {
 	grown := box.Grow(0.25)
 	min, max := grown.Min(), grown.Max()
 	minX, minY, minZ := int(math.Floor(min[0])), int(math.Floor(min[1])), int(math.Floor(min[2]))
@@ -178,17 +184,21 @@ func blockBBoxsAround(tx *world.Tx, box cube.BBox) []cube.BBox {
 	// maximum cannot collide with it.
 	maxX, maxY, maxZ := int(math.Ceil(max[0])), int(math.Ceil(max[1])), int(math.Ceil(max[2]))
 
-	// A prediction of one BBox per block, plus an additional 2, in case. Allocate
-	// it lazily so that entities moving through air do not allocate an empty slice
-	// every tick.
 	predicted := (maxX-minX)*(maxY-minY)*(maxZ-minZ) + 2
-	var blockBBoxs []cube.BBox
+	blockBBoxs := c.boxes[:0]
 	for y := minY; y < maxY; y++ {
 		for x := minX; x < maxX; x++ {
 			for z := minZ; z < maxZ; z++ {
 				pos := cube.Pos{x, y, z}
+				if _, solid := tx.Block(pos).Model().(model.Solid); solid {
+					if cap(blockBBoxs) == 0 {
+						blockBBoxs = make([]cube.BBox, 0, predicted)
+					}
+					blockBBoxs = append(blockBBoxs, fullBlock.Translate(mgl64.Vec3{float64(x), float64(y), float64(z)}))
+					continue
+				}
 				boxes := tx.Block(pos).Model().BBox(pos, tx)
-				if len(boxes) != 0 && blockBBoxs == nil {
+				if len(boxes) != 0 && cap(blockBBoxs) == 0 {
 					blockBBoxs = make([]cube.BBox, 0, predicted)
 				}
 				for _, box := range boxes {
@@ -197,5 +207,6 @@ func blockBBoxsAround(tx *world.Tx, box cube.BBox) []cube.BBox {
 			}
 		}
 	}
+	c.boxes = blockBBoxs
 	return blockBBoxs
 }

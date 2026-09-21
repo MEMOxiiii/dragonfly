@@ -59,6 +59,24 @@ func (s *Session) addSpecificMetadata(e any, m protocol.EntityMetadata) {
 	if gl, ok := e.(glider); ok && gl.Gliding() {
 		m.SetFlag(protocol.EntityDataKeyFlags, protocol.EntityDataFlagGliding)
 	}
+	if c, ok := e.(colourIndexed); ok {
+		m[protocol.EntityDataKeyColorIndex] = c.ColourValue()
+	}
+	if v, ok := e.(variantEntity); ok {
+		m[protocol.EntityDataKeyVariant] = v.Variant()
+	}
+	if sh, ok := e.(shearable); ok && sh.Sheared() {
+		m.SetFlag(protocol.EntityDataKeyFlags, protocol.EntityDataFlagSheared)
+	}
+	if sa, ok := e.(saddleable); ok && sa.Saddled() {
+		m.SetFlag(protocol.EntityDataKeyFlags, protocol.EntityDataFlagSaddled)
+	}
+	if t, ok := e.(tameable); ok && t.Tamed() {
+		m.SetFlag(protocol.EntityDataKeyFlags, protocol.EntityDataFlagTamed)
+	}
+	if si, ok := e.(sittable); ok && si.Sitting() {
+		m.SetFlag(protocol.EntityDataKeyFlags, protocol.EntityDataFlagSitting)
+	}
 	if bb, ok := e.(baby); ok && bb.Baby() {
 		m.SetFlag(protocol.EntityDataKeyFlags, protocol.EntityDataFlagBaby)
 	}
@@ -240,6 +258,36 @@ type crawler interface {
 
 type glider interface {
 	Gliding() bool
+}
+
+// colourIndexed is an entity that has a colour, such as a sheep.
+type colourIndexed interface {
+	ColourValue() uint8
+}
+
+// variantEntity is an entity that has a variant, such as a cat or a rabbit.
+type variantEntity interface {
+	Variant() int32
+}
+
+// shearable is an entity that may be sheared, such as a sheep.
+type shearable interface {
+	Sheared() bool
+}
+
+// saddleable is an entity that may carry a saddle, such as a pig.
+type saddleable interface {
+	Saddled() bool
+}
+
+// tameable is an entity that may be tamed, such as a wolf.
+type tameable interface {
+	Tamed() bool
+}
+
+// sittable is an entity that may sit down, such as a tamed wolf.
+type sittable interface {
+	Sitting() bool
 }
 
 type baby interface {

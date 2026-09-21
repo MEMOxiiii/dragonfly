@@ -32,6 +32,15 @@ type EnchantedHitAction struct {
 // entity disappears from viewers watching it.
 type DeathAction struct{ action }
 
+// TameAction is a world.EntityAction that makes an entity show the particles of being tamed.
+type TameAction struct{ action }
+
+// TameFailAction is a world.EntityAction that makes an entity show the particles of failing to be tamed.
+type TameFailAction struct{ action }
+
+// LoveAction is a world.EntityAction that makes an entity display hearts, shown when a mob is in love.
+type LoveAction struct{ action }
+
 // EatAction is a world.EntityAction that makes an entity display the eating particles at its mouth to viewers with the
 // item in its hand being eaten.
 type EatAction struct{ action }

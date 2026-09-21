@@ -7,26 +7,46 @@ import (
 	"github.com/df-mc/dragonfly/server/world"
 )
 
+// init registers the spawn egg of every mob. Spawn eggs are registered here
+// because the item package cannot refer to the mobs itself.
+func init() {
+	for _, t := range MobTypes() {
+		if t.SpawnEggName() != "" {
+			world.RegisterItem(item.SpawnEgg{Type: t})
+		}
+	}
+}
+
 // DefaultRegistry is a world.EntityRegistry that registers all default entities
 // implemented by Dragonfly.
-var DefaultRegistry = conf.New([]world.EntityType{
-	AreaEffectCloudType,
-	ArrowType,
-	BottleOfEnchantingType,
-	EggType,
-	EndCrystalType,
-	EnderPearlType,
-	ExperienceOrbType,
-	FallingBlockType,
-	FireworkType,
-	ItemType,
-	LightningType,
-	LingeringPotionType,
-	SnowballType,
-	SplashPotionType,
-	TNTType,
-	TextType,
-})
+var DefaultRegistry = conf.New(defaultEntityTypes())
+
+// defaultEntityTypes returns the EntityType of every entity implemented by
+// Dragonfly, including the mobs returned by MobTypes.
+func defaultEntityTypes() []world.EntityType {
+	types := []world.EntityType{
+		AreaEffectCloudType,
+		ArrowType,
+		BottleOfEnchantingType,
+		EggType,
+		EndCrystalType,
+		EnderPearlType,
+		ExperienceOrbType,
+		FallingBlockType,
+		FireworkType,
+		ItemType,
+		LightningType,
+		LingeringPotionType,
+		SnowballType,
+		SplashPotionType,
+		TNTType,
+		TextType,
+	}
+	for _, t := range MobTypes() {
+		types = append(types, t)
+	}
+	return types
+}
 
 var conf = world.EntityRegistryConfig{
 	TNT:                NewTNT,

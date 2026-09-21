@@ -17,7 +17,7 @@ func init() {
 	// TODO: (11) Bane of Arthropods. (Requires arthropod mobs)
 	item.RegisterEnchantment(12, Knockback)
 	item.RegisterEnchantment(13, FireAspect)
-	// TODO: (14) Looting.
+	item.RegisterEnchantment(14, Looting)
 	item.RegisterEnchantment(15, Efficiency)
 	item.RegisterEnchantment(16, SilkTouch)
 	item.RegisterEnchantment(17, Unbreaking)
