@@ -66,6 +66,9 @@ func (s Slab) Instrument() sound.Instrument {
 	if _, ok := s.Block.(BambooMosaic); ok {
 		return sound.Bass()
 	}
+	if _, ok := s.Block.(Wool); ok {
+		return sound.Guitar()
+	}
 	return sound.BassDrum()
 }
 
@@ -128,10 +131,11 @@ func (s Slab) BreakInfo() BreakInfo {
 		hardness, blastResistance, harvestable, effective = breakInfo.Hardness, breakInfo.BlastResistance, breakInfo.Harvestable, breakInfo.Effective
 	}
 	return newBreakInfo(hardness, harvestable, effective, func(tool item.Tool, enchantments []item.Enchantment) []item.Stack {
+		single := Slab{Block: s.Block}
 		if s.Double {
-			return []item.Stack{item.NewStack(s, 2)}
+			return []item.Stack{item.NewStack(single, 2)}
 		}
-		return []item.Stack{item.NewStack(s, 1)}
+		return []item.Stack{item.NewStack(single, 1)}
 	}).withBlastResistance(blastResistance)
 }
 

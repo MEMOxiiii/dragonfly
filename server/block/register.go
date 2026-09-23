@@ -58,7 +58,7 @@ func init() {
 	}
 	world.RegisterBlock(EndStone{})
 	world.RegisterBlock(FletchingTable{})
-	world.RegisterBlock(GlassPane{})
+	registerAll(allGlassPane())
 	world.RegisterBlock(Glass{})
 	world.RegisterBlock(Glowstone{})
 	world.RegisterBlock(Gold{})
@@ -67,6 +67,7 @@ func init() {
 	world.RegisterBlock(Grass{})
 	world.RegisterBlock(Gravel{})
 	world.RegisterBlock(Honeycomb{})
+	world.RegisterBlock(Ice{})
 	world.RegisterBlock(InfestedStone{})
 	world.RegisterBlock(InfestedCobblestone{})
 	for _, b := range allInfestedStoneBricks() {
@@ -76,7 +77,7 @@ func init() {
 		world.RegisterBlock(b)
 	}
 	world.RegisterBlock(InvisibleBedrock{})
-	world.RegisterBlock(IronBars{})
+	registerAll(allIronBars())
 	world.RegisterBlock(Iron{})
 	world.RegisterBlock(Jukebox{})
 	world.RegisterBlock(Lapis{})
@@ -86,7 +87,8 @@ func init() {
 	world.RegisterBlock(MossCarpet{})
 	world.RegisterBlock(MudBricks{})
 	world.RegisterBlock(Mud{})
-	world.RegisterBlock(NetherBrickFence{})
+	world.RegisterBlock(Mycelium{})
+	registerAll(allNetherBrickFence())
 	world.RegisterBlock(NetherGoldOre{})
 	world.RegisterBlock(NetherQuartzOre{})
 	world.RegisterBlock(NetherSprouts{})
@@ -134,6 +136,7 @@ func init() {
 	world.RegisterBlock(PolishedSulfur{})
 	world.RegisterBlock(TNT{})
 	world.RegisterBlock(Terracotta{})
+	world.RegisterBlock(TintedGlass{})
 	world.RegisterBlock(Tuff{})
 	world.RegisterBlock(Tuff{Chiseled: true})
 	world.RegisterBlock(TuffBricks{})
@@ -226,6 +229,7 @@ func init() {
 	registerAll(allRedstoneWires())
 	registerAll(allSandstones())
 	registerAll(allScaffolding())
+	registerAll(allSaplings())
 	registerAll(allSeaPickles())
 	registerAll(allSigns())
 	registerAll(allSkulls())
@@ -236,7 +240,10 @@ func init() {
 	registerAll(allStainedTerracotta())
 	registerAll(allStairs())
 	registerAll(allStoneBricks())
+	world.RegisterBlock(RedShrub{})
+	registerAll(allShelfMushrooms())
 	registerAll(allStonecutters())
+	registerAll(allStrawBeds())
 	registerAll(allString())
 	registerAll(allSugarCane())
 	registerAll(allTorches())
@@ -339,6 +346,7 @@ func init() {
 	world.RegisterItem(HayBale{})
 	world.RegisterItem(Honeycomb{})
 	world.RegisterItem(Hopper{})
+	world.RegisterItem(Ice{})
 	world.RegisterItem(InfestedStone{})
 	world.RegisterItem(InfestedCobblestone{})
 	for _, t := range StoneBricksTypes() {
@@ -366,6 +374,7 @@ func init() {
 	world.RegisterItem(MudBricks{})
 	world.RegisterItem(MuddyMangroveRoots{})
 	world.RegisterItem(Mud{})
+	world.RegisterItem(Mycelium{})
 	world.RegisterItem(NetherBrickFence{})
 	world.RegisterItem(NetherGoldOre{})
 	world.RegisterItem(NetherQuartzOre{})
@@ -421,8 +430,11 @@ func init() {
 	world.RegisterItem(Sponge{})
 	world.RegisterItem(SporeBlossom{})
 	world.RegisterItem(Stonecutter{})
+	world.RegisterItem(RedShrub{})
+	world.RegisterItem(ShelfMushroom{})
 	world.RegisterItem(Stone{Smooth: true})
 	world.RegisterItem(Stone{})
+	world.RegisterItem(StrawBed{})
 	world.RegisterItem(String{})
 	world.RegisterItem(SugarCane{})
 	world.RegisterItem(Sulfur{})
@@ -431,6 +443,7 @@ func init() {
 	world.RegisterItem(PolishedSulfur{})
 	world.RegisterItem(TNT{})
 	world.RegisterItem(Terracotta{})
+	world.RegisterItem(TintedGlass{})
 	world.RegisterItem(Tuff{})
 	world.RegisterItem(Tuff{Chiseled: true})
 	world.RegisterItem(TuffBricks{})
@@ -464,6 +477,9 @@ func init() {
 	for _, t := range AnvilTypes() {
 		world.RegisterItem(Anvil{Type: t})
 	}
+	for _, t := range SaplingTypes() {
+		world.RegisterItem(Sapling{Type: t})
+	}
 	for _, c := range item.Colours() {
 		world.RegisterItem(Banner{Colour: c})
 		world.RegisterItem(Bed{Colour: c})
@@ -495,6 +511,9 @@ func init() {
 	}
 	world.RegisterItem(Leaves{Type: AzaleaLeaves(), Persistent: true})
 	world.RegisterItem(Leaves{Type: FloweringAzaleaLeaves(), Persistent: true})
+	for _, t := range PoplarLeavesTypes() {
+		world.RegisterItem(Leaves{Type: t, Persistent: true})
+	}
 	for _, ore := range OreTypes() {
 		world.RegisterItem(CoalOre{Type: ore})
 		world.RegisterItem(CopperOre{Type: ore})

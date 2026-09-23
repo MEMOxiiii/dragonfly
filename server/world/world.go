@@ -273,6 +273,7 @@ func (tx *Tx) biome(pos cube.Pos) Biome {
 	b, ok := BiomeByID(id)
 	if !ok {
 		tx.World().conf.Log.Error("biome not found by ID", "ID", id)
+		return unknownBiome{id: id}
 	}
 	return b
 }
@@ -733,6 +734,16 @@ func (tx *Tx) skyLight(pos cube.Pos) uint8 {
 		return 15
 	}
 	return tx.chunk(chunkPosFromBlockPos(pos)).SkyLight(uint8(pos[0]), int16(pos[1]), uint8(pos[2]))
+}
+
+// blockLight returns the block light level at the position passed. Unlike light, this level is not
+// influenced by the light of the sky.
+func (tx *Tx) blockLight(pos cube.Pos) uint8 {
+	w := tx.World()
+	if pos[1] < w.ra[0] || pos[1] > w.ra[1] {
+		return 0
+	}
+	return tx.chunk(chunkPosFromBlockPos(pos)).BlockLight(uint8(pos[0]), int16(pos[1]), uint8(pos[2]))
 }
 
 // Time returns the current time of the world. The time is incremented every
@@ -1432,6 +1443,7 @@ func (w *World) addChunk(pos ChunkPos, c *chunk.Column) *Column {
 		e.markWorldReady(w)
 	}
 	w.calculateLight(pos)
+	w.deriveStates(pos)
 	return column
 }
 

@@ -572,15 +572,8 @@ func (p *Player) updateFallState(distanceThisTick float64) {
 
 // fall is called when a falling entity hits the ground.
 func (p *Player) fall(distance float64) {
-	pos := cube.PosFromVec3(p.Position())
-	b := p.tx.Block(pos)
-
-	if len(b.Model().BBox(pos, p.tx)) == 0 {
-		pos = pos.Sub(cube.Pos{0, 1})
-		b = p.tx.Block(pos)
-	}
-	if h, ok := b.(block.EntityLander); ok {
-		h.EntityLand(pos, p.tx, p, &distance)
+	if pos, lander, ok := p.landedOn(); ok {
+		lander.EntityLand(pos, p.tx, p, &distance)
 	}
 	dmg := distance - 3
 	if boost, ok := p.Effect(effect.JumpBoost); ok {
@@ -590,6 +583,35 @@ func (p *Player) fall(distance float64) {
 		return
 	}
 	p.Hurt(math.Ceil(dmg), entity.FallDamageSource{})
+}
+
+// landedOn returns the first block.EntityLander the Player came to rest on, along with its position.
+func (p *Player) landedOn() (cube.Pos, block.EntityLander, bool) {
+	low, high := p.blocksUnder()
+	for x := low[0]; x <= high[0]; x++ {
+		for z := low[2]; z <= high[2]; z++ {
+			pos := cube.Pos{x, low[1], z}
+			if lander, ok := p.tx.Block(pos).(block.EntityLander); ok {
+				return pos, lander, true
+			}
+		}
+	}
+	return cube.Pos{}, nil, false
+}
+
+// blocksUnder returns the corners of the range of block positions directly below the Player. Every block in that range
+// is one the Player stands on: the Player is narrower than a block, so it may rest on the edge of one with its centre
+// over the block beside it, and looking only below its centre would miss the block it is actually standing on.
+func (p *Player) blocksUnder() (low, high cube.Pos) {
+	box := Type.BBox(p).Translate(p.Position())
+	// The Y is taken from the box itself, while the horizontal range is taken from a slightly smaller box so that a
+	// Player resting exactly on the boundary between two blocks does not reach into the column beside the one it
+	// stands on.
+	y := int(math.Floor(box.Min()[1] - 0.0001))
+	horizontal := box.Grow(-0.0001)
+	low, high = cube.PosFromVec3(horizontal.Min()), cube.PosFromVec3(horizontal.Max())
+	low[1], high[1] = y, y
+	return low, high
 }
 
 // Hurt hurts the player for a given amount of damage. The source passed
@@ -948,7 +970,7 @@ func (p *Player) MoveItemsToInventory() {
 		if n, err := p.inv.AddItem(i); err != nil {
 			// We couldn't add the item to the main inventory (probably because
 			// it was full), so we drop it instead.
-			p.Drop(i.Grow(i.Count() - n))
+			p.Drop(i.Grow(-n))
 		}
 	}
 }
@@ -1277,8 +1299,8 @@ func (p *Player) Sleep(pos cube.Pos) {
 	}
 
 	tx := p.tx
-	b, ok := tx.Block(pos).(block.Bed)
-	if !ok || b.Sleeper != nil {
+	b, ok := tx.Block(pos).(block.Sleepable)
+	if !ok || b.SleepingEntity() != nil {
 		// The player cannot sleep here.
 		return
 	}
@@ -1288,8 +1310,7 @@ func (p *Player) Sleep(pos cube.Pos) {
 		return
 	}
 
-	b.Sleeper = p.H()
-	tx.SetBlock(pos, b, nil)
+	b.StartSleeping(pos, tx, p.H())
 
 	tx.World().SetRequiredSleepDuration(time.Millisecond * 5050)
 
@@ -1323,9 +1344,8 @@ func (p *Player) Wake() {
 	p.updateState()
 
 	pos := p.sleepPos
-	if b, ok := tx.Block(pos).(block.Bed); ok {
-		b.Sleeper = nil
-		tx.SetBlock(pos, b, nil)
+	if b, ok := tx.Block(pos).(block.Sleepable); ok {
+		b.StopSleeping(pos, tx)
 	}
 }
 
@@ -1785,6 +1805,9 @@ func (p *Player) UseItemOnBlock(pos cube.Pos, face cube.Face, clickPos mgl64.Vec
 		}
 		if replaceable, ok := p.tx.Block(replacedPos).(block.Replaceable); !ok || !replaceable.ReplaceableBy(ib) || replacedPos.OutOfBounds(p.tx.Range()) {
 			return
+		}
+		if deriver, ok := ib.(world.StateDeriver); ok {
+			ib = deriver.DeriveState(replacedPos, p.tx)
 		}
 		if !p.placeBlock(replacedPos, ib, false) || p.GameMode().CreativeInventory() {
 			return
@@ -2759,7 +2782,7 @@ func (p *Player) RemoveViewLayer(entity world.Entity) {
 // tickAirSupply tick's the player's air supply, consuming it when underwater, and replenishing it when out of water.
 func (p *Player) tickAirSupply() {
 	if !p.canBreathe() {
-		if r, ok := p.Armour().Helmet().Enchantment(enchantment.Respiration); ok && rand.Float64() <= enchantment.Respiration.Chance(r.Level()) {
+		if r, ok := p.Armour().Helmet().Enchantment(enchantment.Respiration); ok && rand.Float64() < enchantment.Respiration.Chance(r.Level()) {
 			// respiration grants a chance to avoid drowning damage every tick.
 			return
 		}
@@ -2890,6 +2913,9 @@ func (p *Player) insideOfSolid() bool {
 		// Transparent.
 		return false
 	}
+	if immune, ok := b.(block.NonSuffocating); ok && immune.PreventsSuffocation() {
+		return false
+	}
 	for _, blockBox := range b.Model().BBox(pos, p.tx) {
 		if blockBox.Translate(pos.Vec3()).IntersectsWith(box) {
 			return true
@@ -2984,13 +3010,10 @@ func (p *Player) checkEntitySteppers() {
 	if !p.OnGround() {
 		return
 	}
-	box := Type.BBox(p).Translate(p.Position()).Grow(-0.0001)
-	low, high := cube.PosFromVec3(box.Min()), cube.PosFromVec3(box.Max())
-	y := int(math.Floor(box.Min()[1] - 0.0001))
-
+	low, high := p.blocksUnder()
 	for x := low[0]; x <= high[0]; x++ {
 		for z := low[2]; z <= high[2]; z++ {
-			pos := cube.Pos{x, y, z}
+			pos := cube.Pos{x, low[1], z}
 			if stepper, ok := p.tx.Block(pos).(block.EntityStepper); ok {
 				stepper.EntityStepOn(pos, p.tx, p)
 				return
@@ -3280,7 +3303,7 @@ func (p *Player) addNewItem(ctx *item.UseContext) {
 	n, err := p.Inventory().AddItem(ctx.NewItem)
 	if err != nil {
 		// Not all items could be added to the inventory, so drop the rest.
-		p.Drop(ctx.NewItem.Grow(ctx.NewItem.Count() - n))
+		p.Drop(ctx.NewItem.Grow(-n))
 	}
 	if p.Dead() {
 		p.dropItems()
