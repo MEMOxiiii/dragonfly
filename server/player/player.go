@@ -1305,8 +1305,8 @@ func (p *Player) Sleep(pos cube.Pos) {
 	}
 
 	tx := p.tx
-	b, ok := tx.Block(pos).(block.Bed)
-	if !ok || b.Sleeper != nil {
+	b, ok := tx.Block(pos).(block.Sleepable)
+	if !ok || b.SleepingEntity() != nil {
 		// The player cannot sleep here.
 		return
 	}
@@ -1316,8 +1316,7 @@ func (p *Player) Sleep(pos cube.Pos) {
 		return
 	}
 
-	b.Sleeper = p.H()
-	tx.SetBlock(pos, b, nil)
+	b.StartSleeping(pos, tx, p.H())
 
 	tx.World().SetRequiredSleepDuration(time.Millisecond * 5050)
 
@@ -1351,9 +1350,8 @@ func (p *Player) Wake() {
 	p.updateState()
 
 	pos := p.sleepPos
-	if b, ok := tx.Block(pos).(block.Bed); ok {
-		b.Sleeper = nil
-		tx.SetBlock(pos, b, nil)
+	if b, ok := tx.Block(pos).(block.Sleepable); ok {
+		b.StopSleeping(pos, tx)
 	}
 }
 
@@ -1814,6 +1812,9 @@ func (p *Player) UseItemOnBlock(pos cube.Pos, face cube.Face, clickPos mgl64.Vec
 		}
 		if replaceable, ok := p.tx.Block(replacedPos).(block.Replaceable); !ok || !replaceable.ReplaceableBy(ib) || replacedPos.OutOfBounds(p.tx.Range()) {
 			return
+		}
+		if deriver, ok := ib.(world.StateDeriver); ok {
+			ib = deriver.DeriveState(replacedPos, p.tx)
 		}
 		if !p.placeBlock(replacedPos, ib, false) || p.GameMode().CreativeInventory() {
 			return

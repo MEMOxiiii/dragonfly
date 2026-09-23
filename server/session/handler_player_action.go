@@ -49,7 +49,7 @@ func handlePlayerAction(action int32, face int32, pos protocol.BlockPos, entityR
 	case protocol.PlayerActionStopItemUseOn:
 		c.AbortBrushing()
 		c.ReleaseItem()
-	case protocol.PlayerActionStartBuildingBlock:
+	case protocol.PlayerActionInteractWithBlock:
 		// Don't do anything for this action.
 	case protocol.PlayerActionCreativePlayerDestroyBlock:
 		// Don't do anything for this action.
