@@ -4,7 +4,6 @@ import (
 	"math/rand/v2"
 
 	"github.com/df-mc/dragonfly/server/block/cube"
-	"github.com/df-mc/dragonfly/server/event"
 	"github.com/df-mc/dragonfly/server/world"
 )
 
@@ -22,7 +21,7 @@ type Farmland struct {
 // SoilFor ...
 func (f Farmland) SoilFor(block world.Block) bool {
 	switch block.(type) {
-	case ShortGrass, Fern, DoubleTallGrass, Flower, DoubleFlower, NetherSprouts, PinkPetals, DeadBush:
+	case ShortGrass, Fern, DoubleTallGrass, Flower, DoubleFlower, NetherSprouts, PinkPetals, DeadBush, Sapling, RedShrub:
 		return true
 	}
 	return false
@@ -74,7 +73,7 @@ func (f Farmland) hydrated(pos cube.Pos, tx *world.Tx) bool {
 func (f Farmland) EntityLand(pos cube.Pos, tx *world.Tx, e world.Entity, _ *float64) {
 	if living, ok := e.(livingEntity); ok {
 		if fall, ok := living.(fallDistanceEntity); ok && rand.Float64() < fall.FallDistance()-0.5 {
-			ctx := event.C(tx)
+			ctx := tx.Event()
 			if tx.World().Handler().HandleCropTrample(ctx, pos); !ctx.Cancelled() {
 				tx.SetBlock(pos, Dirt{}, nil)
 			}

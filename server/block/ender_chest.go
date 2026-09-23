@@ -35,9 +35,11 @@ func NewEnderChest() EnderChest {
 	return EnderChest{viewers: &atomic.Int64{}}
 }
 
+func (EnderChest) ContainerSize() int { return 27 }
+
 // BreakInfo ...
 func (c EnderChest) BreakInfo() BreakInfo {
-	return newBreakInfo(22.5, pickaxeHarvestable, pickaxeEffective, silkTouchDrop(item.NewStack(Obsidian{}, 8), item.NewStack(NewEnderChest(), 1))).withBlastResistance(3000)
+	return newBreakInfo(22.5, pickaxeHarvestable, pickaxeEffective, silkTouchDrop(item.NewStack(Obsidian{}, 8), item.NewStack(NewEnderChest(), 1))).withBlastResistance(600)
 }
 
 // LightEmissionLevel ...

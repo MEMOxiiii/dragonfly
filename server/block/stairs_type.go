@@ -1,6 +1,7 @@
 package block
 
 import (
+	"github.com/df-mc/dragonfly/server/item"
 	"github.com/df-mc/dragonfly/server/world"
 )
 
@@ -22,11 +23,19 @@ func encodeStairsBlock(block world.Block) string {
 		return "bamboo_mosaic"
 	case Bricks:
 		return "brick"
+	case Cinnabar:
+		if !block.Chiseled {
+			return "cinnabar"
+		}
+	case CinnabarBricks:
+		return "cinnabar_brick"
 	case Cobblestone:
 		if block.Mossy {
 			return "mossy_cobblestone"
 		}
 		return "stone"
+	case Concrete:
+		return block.Colour.String() + "_concrete"
 	case Copper:
 		if block.Type == CutCopper() {
 			name := "cut_copper"
@@ -77,6 +86,10 @@ func encodeStairsBlock(block world.Block) string {
 		if !block.Cracked {
 			return "polished_blackstone_brick"
 		}
+	case PolishedCinnabar:
+		return "polished_cinnabar"
+	case PolishedSulfur:
+		return "polished_sulfur"
 	case PolishedTuff:
 		return "polished_tuff"
 	case Prismarine:
@@ -121,6 +134,12 @@ func encodeStairsBlock(block world.Block) string {
 			return "mossy_stone_brick"
 		}
 		return "stone_brick"
+	case Sulfur:
+		if !block.Chiseled {
+			return "sulfur"
+		}
+	case SulfurBricks:
+		return "sulfur_brick"
 	case Tuff:
 		if !block.Chiseled {
 			return "tuff"
@@ -129,6 +148,8 @@ func encodeStairsBlock(block world.Block) string {
 		if !block.Chiseled {
 			return "tuff_brick"
 		}
+	case Wool:
+		return block.Colour.String() + "_wool"
 	}
 	panic("invalid block used for stairs")
 }
@@ -142,6 +163,8 @@ func StairsBlocks() []world.Block {
 		Blackstone{Type: PolishedBlackstone()},
 		Blackstone{},
 		Bricks{},
+		Cinnabar{},
+		CinnabarBricks{},
 		Cobblestone{Mossy: true},
 		Cobblestone{},
 		DeepslateBricks{},
@@ -157,6 +180,8 @@ func StairsBlocks() []world.Block {
 		NetherBricks{Type: RedNetherBricks()},
 		NetherBricks{},
 		PolishedBlackstoneBrick{},
+		PolishedCinnabar{},
+		PolishedSulfur{},
 		PolishedTuff{},
 		Purpur{},
 		Quartz{Smooth: true},
@@ -165,6 +190,8 @@ func StairsBlocks() []world.Block {
 		StoneBricks{Type: MossyStoneBricks()},
 		StoneBricks{},
 		Stone{},
+		Sulfur{},
+		SulfurBricks{},
 		Tuff{},
 		TuffBricks{},
 	}
@@ -183,6 +210,10 @@ func StairsBlocks() []world.Block {
 	for _, o := range OxidationTypes() {
 		b = append(b, Copper{Type: CutCopper(), Oxidation: o})
 		b = append(b, Copper{Type: CutCopper(), Oxidation: o, Waxed: true})
+	}
+	for _, c := range item.Colours() {
+		b = append(b, Concrete{Colour: c})
+		b = append(b, Wool{Colour: c})
 	}
 	return b
 }

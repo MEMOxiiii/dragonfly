@@ -32,6 +32,8 @@ func NewFurnace(face cube.Direction) Furnace {
 	}
 }
 
+func (Furnace) ContainerSize() int { return 3 }
+
 // Tick is called to check if the furnace should update and start or stop smelting.
 func (f Furnace) Tick(_ int64, pos cube.Pos, tx *world.Tx) {
 	if f.Lit && rand.Float64() <= 0.016 { // Every three or so seconds.
@@ -79,7 +81,10 @@ func (f Furnace) UseOnBlock(pos cube.Pos, face cube.Face, _ mgl64.Vec3, tx *worl
 
 // BreakInfo ...
 func (f Furnace) BreakInfo() BreakInfo {
-	xp := f.Experience()
+	xp := 0
+	if f.smelter != nil {
+		xp = f.Experience()
+	}
 	return newBreakInfo(3.5, alwaysHarvestable, pickaxeEffective, oneOf(Furnace{})).withXPDropRange(xp, xp).withBreakHandler(func(pos cube.Pos, tx *world.Tx, u item.User) {
 		for _, i := range f.Inventory(tx, pos).Clear() {
 			dropItem(tx, i, pos.Vec3())

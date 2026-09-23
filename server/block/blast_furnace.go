@@ -25,6 +25,8 @@ type BlastFurnace struct {
 	Lit bool
 }
 
+func (BlastFurnace) ContainerSize() int { return 3 }
+
 // NewBlastFurnace creates a new initialised blast furnace. The smelter is properly initialised.
 func NewBlastFurnace(face cube.Direction) BlastFurnace {
 	return BlastFurnace{
@@ -80,7 +82,10 @@ func (b BlastFurnace) UseOnBlock(pos cube.Pos, face cube.Face, _ mgl64.Vec3, tx 
 
 // BreakInfo ...
 func (b BlastFurnace) BreakInfo() BreakInfo {
-	xp := b.Experience()
+	xp := 0
+	if b.smelter != nil {
+		xp = b.Experience()
+	}
 	return newBreakInfo(3.5, alwaysHarvestable, pickaxeEffective, oneOf(BlastFurnace{})).withXPDropRange(xp, xp).withBreakHandler(func(pos cube.Pos, tx *world.Tx, u item.User) {
 		for _, i := range b.Inventory(tx, pos).Clear() {
 			dropItem(tx, i, pos.Vec3())

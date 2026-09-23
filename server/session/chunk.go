@@ -63,26 +63,30 @@ func (s *Session) ViewSubChunks(centre world.SubChunkPos, offsets []protocol.Sub
 
 func (s *Session) subChunkEntry(offset protocol.SubChunkOffset, ind int16, col *world.Column, transaction map[uint64]struct{}) protocol.SubChunkEntry {
 	chunkMap := col.HeightMap()
-	subMapType, subMap := byte(protocol.HeightMapDataHasData), make([]int8, 256)
+	subMapType, subMap := byte(protocol.HeightMapDataHasData), protocol.HeightMap{}
 	higher, lower := true, true
-	for x := uint8(0); x < 16; x++ {
-		for z := uint8(0); z < 16; z++ {
-			y, i := chunkMap.At(x, z), (uint16(z)<<4)|uint16(x)
+	for z := uint8(0); z < 16; z++ {
+		for x := uint8(0); x < 16; x++ {
+			y := chunkMap.At(x, z)
 			otherInd := col.SubIndex(y)
 			switch {
 			case otherInd > ind:
-				subMap[i], lower = 16, false
+				subMap[z][x], lower = 16, false
 			case otherInd < ind:
-				subMap[i], higher = -1, false
+				subMap[z][x], higher = -1, false
 			default:
-				subMap[i], lower, higher = int8(y-col.SubY(otherInd)), false, false
+				subMap[z][x], lower, higher = int8(y-col.SubY(otherInd)), false, false
 			}
 		}
 	}
-	if higher {
-		subMapType, subMap = protocol.HeightMapDataTooHigh, nil
-	} else if lower {
-		subMapType, subMap = protocol.HeightMapDataTooLow, nil
+	var subMapData protocol.Optional[protocol.HeightMap]
+	switch {
+	case higher:
+		subMapType = protocol.HeightMapDataTooHigh
+	case lower:
+		subMapType = protocol.HeightMapDataTooLow
+	default:
+		subMapData = protocol.Option(subMap)
 	}
 
 	sub := col.Sub()[ind]
@@ -90,9 +94,9 @@ func (s *Session) subChunkEntry(offset protocol.SubChunkOffset, ind int16, col *
 		return protocol.SubChunkEntry{
 			Result:              protocol.SubChunkResultSuccessAllAir,
 			HeightMapType:       subMapType,
-			HeightMapData:       subMap,
+			HeightMapData:       subMapData,
 			RenderHeightMapType: subMapType,
-			RenderHeightMapData: subMap,
+			RenderHeightMapData: subMapData,
 			Offset:              offset,
 		}
 	}
@@ -111,19 +115,19 @@ func (s *Session) subChunkEntry(offset protocol.SubChunkOffset, ind int16, col *
 
 	entry := protocol.SubChunkEntry{
 		Result:              protocol.SubChunkResultSuccess,
-		RawPayload:          append(serialisedSubChunk, blockEntityBuf.Bytes()...),
+		RawPayload:          protocol.Option(append(serialisedSubChunk, blockEntityBuf.Bytes()...)),
 		HeightMapType:       subMapType,
-		HeightMapData:       subMap,
+		HeightMapData:       subMapData,
 		RenderHeightMapType: subMapType,
-		RenderHeightMapData: subMap,
+		RenderHeightMapData: subMapData,
 		Offset:              offset,
 	}
 	if s.conn.ClientCacheEnabled() {
 		if hash := xxhash.Sum64(serialisedSubChunk); s.trackBlob(hash, serialisedSubChunk) {
 			transaction[hash] = struct{}{}
 
-			entry.BlobHash = hash
-			entry.RawPayload = blockEntityBuf.Bytes()
+			entry.BlobHash = protocol.Option(hash)
+			entry.RawPayload = protocol.Option(blockEntityBuf.Bytes())
 		}
 	}
 	return entry
@@ -142,13 +146,13 @@ func (s *Session) sendBlobHashes(pos world.ChunkPos, dim world.Dimension, c *chu
 		biomes := chunk.EncodeBiomes(c, chunk.NetworkEncoding)
 		if hash := xxhash.Sum64(biomes); s.trackBlob(hash, biomes) {
 			s.writePacket(&packet.LevelChunk{
-				Dimension:       s.dimensionID(dim),
-				SubChunkCount:   protocol.SubChunkRequestModeLimited,
-				Position:        protocol.ChunkPos(pos),
-				HighestSubChunk: c.HighestFilledSubChunk(),
-				BlobHashes:      []uint64{hash},
-				RawPayload:      []byte{0},
-				CacheEnabled:    true,
+				Dimension:     s.dimensionID(dim),
+				SubChunkCount: 0,
+				Position:      protocol.ChunkPos(pos),
+				SubChunkLimit: protocol.Option(int32(c.HighestFilledSubChunk())),
+				BlobHashes:    []uint64{hash},
+				RawPayload:    []byte{0},
+				CacheEnabled:  true,
 			})
 			return
 		}
@@ -203,11 +207,11 @@ func (s *Session) sendBlobHashes(pos world.ChunkPos, dim world.Dimension, c *chu
 func (s *Session) sendNetworkChunk(pos world.ChunkPos, dim world.Dimension, c *chunk.Chunk, blockEntities map[cube.Pos]world.Block) {
 	if subChunkRequests {
 		s.writePacket(&packet.LevelChunk{
-			Dimension:       s.dimensionID(dim),
-			SubChunkCount:   protocol.SubChunkRequestModeLimited,
-			Position:        protocol.ChunkPos(pos),
-			HighestSubChunk: c.HighestFilledSubChunk(),
-			RawPayload:      append(chunk.EncodeBiomes(c, chunk.NetworkEncoding), 0),
+			Dimension:     s.dimensionID(dim),
+			SubChunkCount: 0,
+			Position:      protocol.ChunkPos(pos),
+			SubChunkLimit: protocol.Option(int32(c.HighestFilledSubChunk())),
+			RawPayload:    append(chunk.EncodeBiomes(c, chunk.NetworkEncoding), 0),
 		})
 		return
 	}
