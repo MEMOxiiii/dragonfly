@@ -3105,56 +3105,43 @@ func (p *Player) OpenSign(pos cube.Pos, frontSide bool) {
 // present, an error is returned.
 func (p *Player) EditSign(pos cube.Pos, frontText, backText string) error {
 	b := p.tx.Block(pos)
-
-	var (
-		waxed    bool
-		front    block.SignText
-		back     block.SignText
-		setBlock func()
-	)
-
-	switch s := b.(type) {
-	case block.Sign:
-		waxed = s.Waxed
-		front, back = s.Front, s.Back
-		setBlock = func() {
-			s.Front, s.Back = front, back
-			p.tx.SetBlock(pos, s, nil)
-		}
-	case block.HangingSign:
-		waxed = s.Waxed
-		front, back = s.Front, s.Back
-		setBlock = func() {
-			s.Front, s.Back = front, back
-			p.tx.SetBlock(pos, s, nil)
-		}
-	default:
+	sign, ok := b.(block.Sign)
+	hanging, isHanging := b.(block.HangingSign)
+	if isHanging {
+		sign, ok = block.Sign{Waxed: hanging.Waxed, Front: hanging.Front, Back: hanging.Back}, true
+	}
+	if !ok {
 		return fmt.Errorf("edit sign: no sign at position %v", pos)
 	}
 
-	if waxed {
+	if sign.Waxed {
 		return nil
-	} else if frontText == front.Text && backText == back.Text {
+	} else if frontText == sign.Front.Text && backText == sign.Back.Text {
 		return nil
 	}
 
 	ctx := NewEventContext(p.tx, p)
-	if frontText != front.Text {
-		if p.Handler().HandleSignEdit(ctx, pos, true, front.Text, frontText); ctx.Cancelled() {
+	if frontText != sign.Front.Text {
+		if p.Handler().HandleSignEdit(ctx, pos, true, sign.Front.Text, frontText); ctx.Cancelled() {
 			p.resendNearbyBlock(pos)
 			return nil
 		}
-		front.Text = frontText
-		front.Owner = p.XUID()
+		sign.Front.Text = frontText
+		sign.Front.Owner = p.XUID()
 	} else {
-		if p.Handler().HandleSignEdit(ctx, pos, false, back.Text, backText); ctx.Cancelled() {
+		if p.Handler().HandleSignEdit(ctx, pos, false, sign.Back.Text, backText); ctx.Cancelled() {
 			p.resendNearbyBlock(pos)
 			return nil
 		}
-		back.Text = backText
-		back.Owner = p.XUID()
+		sign.Back.Text = backText
+		sign.Back.Owner = p.XUID()
 	}
-	setBlock()
+	if isHanging {
+		hanging.Front, hanging.Back = sign.Front, sign.Back
+		p.tx.SetBlock(pos, hanging, nil)
+		return nil
+	}
+	p.tx.SetBlock(pos, sign, nil)
 	return nil
 }
 

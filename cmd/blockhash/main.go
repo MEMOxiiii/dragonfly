@@ -265,7 +265,6 @@ func (b *hashBuilder) ftype(structName, s string, expr ast.Expr, directives map[
 		}
 		return "uint64(" + s + ".Uint8())", 5
 	case "HangingAttachment", "OptionalColour":
-		// HangingAttachment has 24 possible values, so both types fit into 5 bits.
 		return "uint64(" + s + ".Uint8())", 5
 	case "GrindstoneAttachment":
 		return "uint64(" + s + ".Uint8())", 2

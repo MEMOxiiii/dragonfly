@@ -1,6 +1,7 @@
 package block
 
 import (
+	"math"
 	"time"
 
 	"github.com/df-mc/dragonfly/server/block/cube"
@@ -62,7 +63,7 @@ func (h HangingSign) BreakInfo() BreakInfo {
 	return newBreakInfo(1, alwaysHarvestable, axeEffective, oneOf(HangingSign{Wood: h.Wood}))
 }
 
-// Dye dyes the HangingSign, changing its base colour.
+// Dye dyes the HangingSign, changing its base colour to that of the colour passed.
 func (h HangingSign) Dye(pos cube.Pos, userPos mgl64.Vec3, c item.Colour) (world.Block, bool) {
 	if h.EditingFrontSide(pos, userPos) {
 		if h.Front.BaseColour == c.SignRGBA() {
@@ -78,7 +79,7 @@ func (h HangingSign) Dye(pos cube.Pos, userPos mgl64.Vec3, c item.Colour) (world
 	return h, true
 }
 
-// Ink inks the hanging sign.
+// Ink inks the hanging sign either glowing or non-glowing.
 func (h HangingSign) Ink(pos cube.Pos, userPos mgl64.Vec3, glowing bool) (world.Block, bool) {
 	if h.EditingFrontSide(pos, userPos) {
 		if h.Front.Glowing == glowing {
@@ -94,7 +95,7 @@ func (h HangingSign) Ink(pos cube.Pos, userPos mgl64.Vec3, glowing bool) (world.
 	return h, true
 }
 
-// Wax waxes a hanging sign.
+// Wax waxes a hanging sign to prevent it from further editing.
 func (h HangingSign) Wax(cube.Pos, mgl64.Vec3) (world.Block, bool) {
 	if h.Waxed {
 		return h, false
@@ -103,95 +104,128 @@ func (h HangingSign) Wax(cube.Pos, mgl64.Vec3) (world.Block, bool) {
 	return h, true
 }
 
-// UseOnBlock places the hanging sign.
-//
-// Placement rules (matching vanilla Bedrock):
-//   - FaceDown (click underside of block): ceiling-hung. If the block above is a
-//     narrow block (fence, chain, wall, etc.) OR the player is sneaking, the sign
-//     uses V-shape chains (attached_bit=true, 16-step ground_sign_direction).
-//     Otherwise it uses straight chains (attached_bit=false, 4-step facing_direction).
-//   - FaceUp: not allowed.
-//   - Side face: wall-mounted, but ONLY when the supporting block is a solid
-//     full-width block. Narrow blocks (fences, chains, walls, etc.) cannot be
-//     used as wall supports — the sign must be hung from below instead.
+// UseOnBlock ...
 func (h HangingSign) UseOnBlock(pos cube.Pos, face cube.Face, _ mgl64.Vec3, tx *world.Tx, user item.User, ctx *item.UseContext) bool {
-	clickedPos, clickedBlock := pos, tx.Block(pos)
 	pos, face, used := firstReplaceable(tx, pos, face, h)
 	if !used {
 		return false
 	}
-	// When clicking the front or back face of a wall-mounted hanging sign,
-	// place the new sign below it instead of on its side.
-	if existing, ok := clickedBlock.(HangingSign); ok && !existing.Attach.ceiling {
-		fd := existing.Attach.facing.Face()
-		if face == fd || face == fd.Opposite() {
-			pos = clickedPos.Side(cube.FaceDown)
-			face = cube.FaceDown
-		}
-	}
-	switch face {
-	case cube.FaceDown:
-		// Hanging from the underside of a block (ceiling-hung).
-		supportPos := pos.Side(cube.FaceUp)
-		support := tx.Block(supportPos)
-		sneaking := false
-		if s, ok := user.(interface{ Sneaking() bool }); ok {
-			sneaking = s.Sneaking()
-		}
-		newDir := user.Rotation().Direction().Opposite()
-		switch {
-		case !sneaking && canStraightHangFrom(support, supportPos, tx, newDir):
-			// Straight-chain (CeilingEdges): solid block above, or tip-to-tip with a
-			// same-axis straight-chain or wall hanging sign.
-			// Matches CeilingEdgesHangingSign.canBeSupportedAt.
-			h.Attach = CeilingHangingAttachment(newDir)
-		case canCenterHangFrom(support, sneaking):
-			// V-shape (CeilingCenter): narrow/post block above, any hanging sign above,
-			// or sneaking above any solid block.
-			// Matches CeilingCenterHangingSign.canBeSupportedAt + vanilla sneak rule.
-			h.Attach = AttachedCeilingHangingAttachment(user.Rotation().Orientation().Opposite())
-		default:
-			return false
-		}
-	case cube.FaceUp:
-		// Cannot place a hanging sign on top of a block.
+	attach, ok := attachment(pos, face, tx, placerOf(user))
+	if !ok {
 		return false
-	default:
-		// Wall-mounted on the side of a block.
-		// Narrow blocks (fences, chains, walls, bars, panes) do not provide a flat
-		// wall surface — the sign must be hung from their underside instead.
-		support := tx.Block(pos.Side(face.Opposite()))
-		if isNarrowHangingBlock(support) {
-			// Wall-mounted hanging signs may chain side-to-side.
-			if hs, ok := support.(HangingSign); !ok || hs.Attach.ceiling {
-				return false
-			}
-		}
-		// The sign panel is perpendicular to the wall attachment axis.
-		// Facing = RotateRight from the direction toward the wall.
-		wallFacing := face.Direction().RotateRight()
-		// Orient the text toward the player when possible, so the front is readable.
-		if wallFacing == user.Rotation().Direction() {
-			wallFacing = wallFacing.Opposite()
-		}
-		h.Attach = WallHangingAttachment(wallFacing)
 	}
+	h.Attach = attach
+
 	place(tx, pos, h, user, ctx)
+	if !placed(ctx) {
+		return false
+	}
 	if editor, ok := user.(SignEditor); ok {
 		editor.OpenSign(pos, true)
 	}
-	return placed(ctx)
+	return true
 }
 
-// Activate opens the sign editor on right-click if the sign is not waxed.
-// Returns false when the player is holding a hanging sign item so that
-// placement (chaining signs) is not blocked by the editor.
+// placer holds what the way a sign hangs depends on about the player placing it: the orientation and direction
+// a sign it places faces, the horizontal direction it looks in and whether it crouches.
+type placer struct {
+	o            cube.Orientation
+	dir          cube.Direction
+	lookX, lookZ float64
+	sneaking     bool
+}
+
+// placerOf returns the placer of the user passed.
+func placerOf(user item.User) placer {
+	s, ok := user.(interface{ Sneaking() bool })
+	return newPlacer(user.Rotation().Yaw(), ok && s.Sneaking())
+}
+
+// newPlacer rounds the yaw of a player to the sixteen orientations and four directions a sign placed by it faces.
+// A yaw exactly halfway between two of them rounds up, as vanilla does.
+func newPlacer(yaw float64, sneaking bool) placer {
+	rad := mgl64.DegToRad(yaw)
+	yaw += 180
+	return placer{
+		o:        cube.Orientation(int(math.Floor(yaw*16/360+0.5)) & 15),
+		dir:      [...]cube.Direction{cube.South, cube.West, cube.North, cube.East}[int(math.Floor(yaw*4/360+0.5))&3],
+		lookX:    -math.Sin(rad),
+		lookZ:    math.Cos(rad),
+		sneaking: sneaking,
+	}
+}
+
+// attachment picks how a sign placed at the position passed hangs. Clicking a side mounts it on the block
+// clicked or nowhere. Clicking the top or bottom hangs it from what is above, or else mounts it on the first
+// wall around it.
+func attachment(pos cube.Pos, face cube.Face, tx *world.Tx, p placer) (HangingAttachment, bool) {
+	if face != cube.FaceDown && face != cube.FaceUp {
+		return wallAttachmentOn(pos, face.Opposite().Direction(), tx, p)
+	}
+	if a, ok := ceilingAttachment(pos, tx, p); ok {
+		return a, true
+	}
+	return wallAttachment(pos, tx, p)
+}
+
+// ceilingAttachment returns the attachment for a sign hanging below whatever is above the position passed.
+func ceilingAttachment(pos cube.Pos, tx *world.Tx, p placer) (HangingAttachment, bool) {
+	above := pos.Side(cube.FaceUp)
+	b := tx.Block(above)
+	kind := hangingSupport(b, above, tx)
+	if kind == noSupport {
+		return HangingAttachment{}, false
+	}
+	if straightHangs(b, kind, p) {
+		return CeilingHangingAttachment(p.dir), true
+	}
+	return AttachedCeilingHangingAttachment(p.o), true
+}
+
+// wallAttachment returns the attachment for a sign mounted on the first wall around the position passed,
+// starting with the one the player faces.
+func wallAttachment(pos cube.Pos, tx *world.Tx, p placer) (HangingAttachment, bool) {
+	d := p.dir.Opposite()
+	for range cube.Directions() {
+		if a, ok := wallAttachmentOn(pos, d, tx, p); ok {
+			return a, true
+		}
+		d = d.RotateRight()
+	}
+	return HangingAttachment{}, false
+}
+
+// wallAttachmentOn returns the attachment for a sign mounted on the block in the direction passed.
+func wallAttachmentOn(pos cube.Pos, d cube.Direction, tx *world.Tx, p placer) (HangingAttachment, bool) {
+	if !wallHangs(tx, pos.Side(d.Face()), d.Opposite().Face()) {
+		return HangingAttachment{}, false
+	}
+	// The panel turns towards the player, and south or east when the player looks straight along the bar.
+	if d.Face().Axis() == cube.X {
+		if p.lookZ > lookEpsilon {
+			return WallHangingAttachment(cube.North), true
+		}
+		return WallHangingAttachment(cube.South), true
+	}
+	if p.lookX > lookEpsilon {
+		return WallHangingAttachment(cube.West), true
+	}
+	return WallHangingAttachment(cube.East), true
+}
+
+// lookEpsilon is how far the look of a player has to lean to one side of a bar for a sign to face that way.
+const lookEpsilon = 1e-6
+
+// Activate ...
 func (h HangingSign) Activate(pos cube.Pos, face cube.Face, tx *world.Tx, u item.User, _ *item.UseContext) bool {
-	if carrier, ok := u.(interface {
-		HeldItems() (mainHand, offHand item.Stack)
-	}); ok {
-		held, _ := carrier.HeldItems()
-		if _, isHangingSign := held.Item().(HangingSign); isHangingSign {
+	// A hanging sign held is hung against the sign where it can be, and only
+	// opens the editor where it cannot.
+	if held, _ := u.HeldItems(); !held.Empty() {
+		if s, ok := held.Item().(HangingSign); ok {
+			if s.placeable(pos, face, tx, placerOf(u)) {
+				return false
+			}
+		} else if _, ok := held.Item().(world.Block); ok && !h.textFace(face) {
 			return false
 		}
 	}
@@ -205,97 +239,14 @@ func (h HangingSign) Activate(pos cube.Pos, face cube.Face, tx *world.Tx, u item
 
 // NeighbourUpdateTick ...
 func (h HangingSign) NeighbourUpdateTick(pos, _ cube.Pos, tx *world.Tx) {
+	// Vanilla never checks a wall mounted sign again after placing it.
 	if !h.Attach.ceiling {
-		// Wall-mounted signs may chain side-to-side, but the chain must eventually
-		// connect to a real wall support. A segment with only signs is invalid.
-		fd := h.Attach.facing.Face()
-		perp1, perp2, ok := wallSupportFaces(fd)
-		if !ok {
-			return
-		}
-		if !hasWallAnchor(tx, pos, perp1, perp2, map[cube.Pos]struct{}{}) {
-			breakBlock(h, pos, tx)
-		}
 		return
 	}
-	supportPos := pos.Side(cube.FaceUp)
-	support := tx.Block(supportPos)
-	if h.Attach.attached {
-		// V-shape (attached_bit=true): only break if the block above is completely gone.
-		if _, ok := support.(Air); ok {
-			breakBlock(h, pos, tx)
-		}
-	} else {
-		// Straight-chain (attached_bit=false): break if support can no longer hold it.
-		// Any HangingSign above (regardless of its facing direction) is a valid support —
-		// axis checks are placement-time only, not break-condition checks.
-		if _, ok := support.(Air); ok {
-			breakBlock(h, pos, tx)
-			return
-		}
-		switch support.(type) {
-		case WoodFence, NetherBrickFence, Wall,
-			IronChain, CopperChain,
-			IronBars, CopperBars,
-			GlassPane:
-			breakBlock(h, pos, tx)
-			return
-		}
-		if _, ok := support.(HangingSign); ok {
-			return // any hanging sign above is a valid support
-		}
-		if !support.Model().FaceSolid(supportPos, cube.FaceDown, tx) {
-			breakBlock(h, pos, tx)
-		}
+	above := pos.Side(cube.FaceUp)
+	if hangingSupport(tx.Block(above), above, tx) == noSupport {
+		breakBlock(h, pos, tx)
 	}
-}
-
-// wallSupportFaces returns the two faces that may support a wall-mounted hanging
-// sign for a given panel-facing direction.
-func wallSupportFaces(fd cube.Face) (cube.Face, cube.Face, bool) {
-	switch fd {
-	case cube.FaceNorth, cube.FaceSouth:
-		return cube.FaceEast, cube.FaceWest, true
-	case cube.FaceEast, cube.FaceWest:
-		return cube.FaceNorth, cube.FaceSouth, true
-	default:
-		return 0, 0, false
-	}
-}
-
-// hasWallAnchor reports whether the wall-mounted hanging sign at pos has a path
-// through side-connected wall-mounted signs to at least one real wall support.
-func hasWallAnchor(tx *world.Tx, pos cube.Pos, perp1, perp2 cube.Face, visited map[cube.Pos]struct{}) bool {
-	if _, ok := visited[pos]; ok {
-		return false
-	}
-	visited[pos] = struct{}{}
-
-	for _, side := range []cube.Face{perp1, perp2} {
-		nPos := pos.Side(side)
-		nb := tx.Block(nPos)
-
-		if _, ok := nb.(Air); ok {
-			continue
-		}
-		// Any non-narrow block is a real wall anchor.
-		if !isNarrowHangingBlock(nb) {
-			return true
-		}
-		// Continue through wall-mounted hanging signs on the same support axis.
-		if hs, ok := nb.(HangingSign); ok && !hs.Attach.ceiling {
-			np1, np2, valid := wallSupportFaces(hs.Attach.facing.Face())
-			if !valid {
-				continue
-			}
-			if (np1 == perp1 && np2 == perp2) || (np1 == perp2 && np2 == perp1) {
-				if hasWallAnchor(tx, nPos, perp1, perp2, visited) {
-					return true
-				}
-			}
-		}
-	}
-	return false
 }
 
 // EncodeBlock ...
@@ -316,8 +267,7 @@ func (h HangingSign) EncodeBlock() (name string, properties map[string]any) {
 
 // DecodeNBT ...
 func (h HangingSign) DecodeNBT(data map[string]any) any {
-	s := Sign{Front: h.Front, Back: h.Back, Waxed: h.Waxed}
-	s = s.DecodeNBT(data).(Sign)
+	s := Sign{Front: h.Front, Back: h.Back, Waxed: h.Waxed}.DecodeNBT(data).(Sign)
 	h.Front, h.Back, h.Waxed = s.Front, s.Back, s.Waxed
 	return h
 }
@@ -329,82 +279,125 @@ func (h HangingSign) EncodeNBT() map[string]any {
 	return nbt
 }
 
-// EditingFrontSide reports whether the user is editing the front side of the sign.
+// placeable returns whether the sign may be hung against the face of the sign at the position passed.
+func (h HangingSign) placeable(pos cube.Pos, face cube.Face, tx *world.Tx, p placer) bool {
+	at, face, used := firstReplaceable(tx, pos, face, h)
+	if !used {
+		return false
+	}
+	_, ok := attachment(at, face, tx, p)
+	return ok
+}
+
+// textFace returns whether the face passed is one of the two sides the sign shows text on.
+func (h HangingSign) textFace(face cube.Face) bool {
+	f := h.Attach.Rotation().Direction().Face()
+	return face == f || face == f.Opposite()
+}
+
+// EditingFrontSide returns whether the user is editing the front side of the sign.
 func (h HangingSign) EditingFrontSide(pos cube.Pos, userPos mgl64.Vec3) bool {
 	return userPos.Sub(pos.Vec3Centre()).Dot(h.Attach.Rotation().Vec3()) > 0
 }
 
-// canStraightHangFrom reports whether a straight-chain (AttachedBit=false) hanging sign
-// can be placed below block b. supportPos is b's position, tx is the world, and newDir is
-// the facing direction the new sign would use.
-//
-//   - SupportType::FULL → block whose bottom face is solid (full blocks, bottom slabs, etc.).
-//   - WallHangingSign or CeilingEdgesHangingSign with the same facing axis → tip-to-tip.
-func canStraightHangFrom(b world.Block, supportPos cube.Pos, tx *world.Tx, newDir cube.Direction) bool {
-	if _, ok := b.(Air); ok {
+// straightHangs returns whether a sign placed by the placer passed hangs from the block above it on straight
+// chains rather than on chains meeting in a point. Crouching always gathers the chains into a point, and so
+// does a block that only carries a sign at its centre. Below another sign, both have to run along the same
+// axis.
+func straightHangs(b world.Block, kind support, p placer) bool {
+	if p.sneaking {
 		return false
 	}
-	switch b.(type) {
-	case WoodFence, NetherBrickFence, Wall,
-		IronChain, CopperChain,
-		IronBars, CopperBars,
-		GlassPane:
-		return false
+	hs, ok := b.(HangingSign)
+	if !ok {
+		return kind == fullSupport
 	}
-	if hs, ok := b.(HangingSign); ok {
-		if hs.Attach.ceiling && hs.Attach.attached {
-			return false
+	if !hs.Attach.attached {
+		return hs.Attach.facing.Face().Axis() == p.dir.Face().Axis()
+	}
+	return p.o%4 == 0 && hs.Attach.o%4 == 0 && hs.Attach.o%8 == p.o%8
+}
+
+// support is how the underside of a block carries a hanging sign.
+type support uint8
+
+const (
+	noSupport support = iota
+	// centreSupport carries a sign at the centre of the face only, which gathers its chains into a point.
+	centreSupport
+	// fullSupport carries a sign across the whole face, on straight chains.
+	fullSupport
+)
+
+// hangingSupport returns how the underside of the block at the position passed carries a hanging sign.
+func hangingSupport(b world.Block, pos cube.Pos, tx *world.Tx) support {
+	if s, ok := classSupport(b); ok {
+		return s
+	}
+	if b.Model().FaceSolid(pos, cube.FaceDown, tx) {
+		return fullSupport
+	}
+	return noSupport
+}
+
+// classSupport returns the support of the blocks whose vanilla class overrides canProvideSupport rather than
+// leaving it to the shape of the block. None of them carry a sign on their sides.
+func classSupport(b world.Block) (support, bool) {
+	switch b := b.(type) {
+	case HangingSign, WoodFence, NetherBrickFence, Wall, IronBars, CopperBars, GlassPane,
+		Candle, Anvil, EnderChest, Chest, BrewingStand, Lectern:
+		return centreSupport, true
+	case IronChain:
+		return verticalSupport(b.Axis), true
+	case CopperChain:
+		return verticalSupport(b.Axis), true
+	case EndRod:
+		return verticalSupport(b.Facing.Axis()), true
+	case Skull:
+		if b.Attach.hanging {
+			return noSupport, true
 		}
-		return hs.Attach.facing == newDir || hs.Attach.facing == newDir.Opposite()
+		return centreSupport, true
+	case WoodTrapdoor:
+		if b.Top || b.Open {
+			return noSupport, true
+		}
+		return centreSupport, true
+	case Stonecutter, EnchantingTable, Campfire, Farmland, DirtPath:
+		return fullSupport, true
+	case Hopper, Leaves, Torch, CopperTorch, Lantern, CopperLantern:
+		return noSupport, true
 	}
-	return b.Model().FaceSolid(supportPos, cube.FaceDown, tx)
+	return noSupport, false
 }
 
-// canCenterHangFrom reports whether a V-shape (AttachedBit=true) hanging sign can be
-// placed below block b.
-//
-//   - hasCenterSupport() → fence, wall, chain, iron bars, glass pane.
-//   - hasTypeTag(HANGING_SIGN) → any hanging sign variant.
-//
-// Sneaking also allows placement below any solid (non-air) block (vanilla Bedrock
-// forced-V-shape behaviour).
-func canCenterHangFrom(b world.Block, sneaking bool) bool {
-	if _, ok := b.(Air); ok {
+// verticalSupport returns the support of a post that only carries a sign when it stands upright.
+func verticalSupport(axis cube.Axis) support {
+	if axis == cube.Y {
+		return centreSupport
+	}
+	return noSupport
+}
+
+// wallHangs returns whether the block at the position passed carries a wall mounted sign hung against the face given.
+func wallHangs(tx *world.Tx, pos cube.Pos, face cube.Face) bool {
+	b := tx.Block(pos)
+	if hs, ok := b.(HangingSign); ok {
+		// A wall mounted sign carries another along its bar. Vanilla checks this against a list of hanging
+		// signs that is missing poplar, so a poplar one carries nothing.
+		return !hs.Attach.ceiling && hs.Wood != PoplarWood() && hs.Attach.facing.Face().Axis() != face.Axis()
+	}
+	if _, ok := classSupport(b); ok {
 		return false
 	}
-	// isNarrowHangingBlock covers fences, walls, chains, bars, panes, and hanging signs.
-	return isNarrowHangingBlock(b) || sneaking
+	return b.Model().FaceSolid(pos, face, tx)
 }
 
-// canWallHangFrom reports whether block b can support a wall-mounted hanging sign.
-// Any non-narrow, non-air block is a valid wall support.
-func canWallHangFrom(b world.Block) bool {
-	if _, ok := b.(Air); ok {
-		return false
-	}
-	return !isNarrowHangingBlock(b)
-}
-
-// isNarrowHangingBlock reports whether b is a narrow/thin block. Narrow blocks:
-//   - Trigger V-shape (attached_bit=true) chains when a hanging sign is hung from below.
-//   - Cannot be used as a wall surface for wall-mounted hanging signs.
-//
-// This matches the BlockThin / BlockIronChain / BlockHangingSign check.
-func isNarrowHangingBlock(b world.Block) bool {
-	switch b.(type) {
-	case WoodFence, NetherBrickFence, Wall,
-		IronChain, CopperChain,
-		IronBars, CopperBars,
-		GlassPane,
-		HangingSign:
-		return true
-	}
-	return false
-}
-
-// allHangingSigns returns a list of all hanging sign block states.
-func allHangingSigns() (signs []world.Block) {
-	for _, w := range WoodTypes() {
+// allHangingSigns ...
+func allHangingSigns() []world.Block {
+	woods := WoodTypes()
+	signs := make([]world.Block, 0, len(woods)*24)
+	for _, w := range woods {
 		for _, d := range cube.Directions() {
 			signs = append(signs, HangingSign{Wood: w, Attach: WallHangingAttachment(d)})
 			signs = append(signs, HangingSign{Wood: w, Attach: CeilingHangingAttachment(d)})
@@ -413,5 +406,5 @@ func allHangingSigns() (signs []world.Block) {
 			signs = append(signs, HangingSign{Wood: w, Attach: AttachedCeilingHangingAttachment(o)})
 		}
 	}
-	return
+	return signs
 }
