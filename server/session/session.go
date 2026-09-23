@@ -609,11 +609,12 @@ func (s *Session) registerHandlers() {
 		packet.IDRequestAbility:                  &RequestAbilityHandler{},
 		packet.IDRequestChunkRadius:              &RequestChunkRadiusHandler{},
 		packet.IDRespawn:                         &RespawnHandler{},
+		packet.IDSetPlayerFurnaceOptions:         nil,
 		packet.IDSetPlayerInventoryOptions:       nil,
 		packet.IDSubChunkRequest:                 &SubChunkRequestHandler{},
 		packet.IDText:                            &TextHandler{},
 		packet.IDServerBoundLoadingScreen:        &ServerBoundLoadingScreenHandler{},
-		packet.IDServerBoundDiagnostics:          &ServerBoundDiagnosticsHandler{},
+		packet.IDServerBoundDiagnostics:          nil,
 	}
 }
 
