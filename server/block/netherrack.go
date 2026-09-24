@@ -2,11 +2,11 @@ package block
 
 import (
 	"math/rand/v2"
-	"slices"
 
 	"github.com/df-mc/dragonfly/server/block/cube"
 	"github.com/df-mc/dragonfly/server/item"
 	"github.com/df-mc/dragonfly/server/world"
+	"github.com/df-mc/dragonfly/server/world/particle"
 )
 
 // Netherrack is a block found in The Nether.
@@ -23,23 +23,35 @@ func (n Netherrack) SoilFor(block world.Block) bool {
 
 // BoneMeal ...
 func (n Netherrack) BoneMeal(pos cube.Pos, tx *world.Tx) item.BoneMealResult {
-	var types []Nylium
+	var crimson, warped bool
 	for x := -1; x <= 1; x++ {
-		for z := -1; z <= 1; z++ {
-			if x == 0 && z == 0 {
-				continue
-			}
-			if nylium, ok := tx.Block(pos.Add(cube.Pos{x, 0, z})).(Nylium); ok && !slices.Contains(types, nylium) {
-				types = append(types, nylium)
+		for y := -1; y <= 1; y++ {
+			for z := -1; z <= 1; z++ {
+				// Vanilla searches the whole cube around the netherrack apart from the block right below it.
+				if x == 0 && z == 0 && y <= 0 {
+					continue
+				}
+				if nylium, ok := tx.Block(pos.Add(cube.Pos{x, y, z})).(Nylium); ok {
+					warped = warped || nylium.Warped
+					crimson = crimson || !nylium.Warped
+				}
 			}
 		}
 	}
-	if len(types) == 0 {
+	if !crimson && !warped {
 		return item.BoneMealResultNone
 	}
-	tx.SetBlock(pos, types[rand.IntN(len(types))], nil)
+	nylium := Nylium{Warped: warped}
+	if crimson && warped {
+		nylium.Warped = rand.IntN(2) == 0
+	}
+	tx.AddParticle(pos.Vec3(), particle.BoneMeal{})
+	tx.SetBlock(pos, nylium, nil)
 	return item.BoneMealResultSmall
 }
+
+// AddsBoneMealParticle ...
+func (Netherrack) AddsBoneMealParticle() {}
 
 // BreakInfo ...
 func (n Netherrack) BreakInfo() BreakInfo {
