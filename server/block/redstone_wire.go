@@ -19,6 +19,8 @@ type RedstoneWire struct {
 
 	// Power is the current power level of the redstone wire. It ranges from 0 to 15.
 	Power int
+	// North, East, South and West hold how the wire is drawn towards each of its sides.
+	North, East, South, West RedstoneWireConnection
 }
 
 func (r RedstoneWire) UseOnBlock(pos cube.Pos, face cube.Face, _ mgl64.Vec3, tx *world.Tx, user item.User, ctx *item.UseContext) bool {
@@ -26,7 +28,7 @@ func (r RedstoneWire) UseOnBlock(pos cube.Pos, face cube.Face, _ mgl64.Vec3, tx 
 	if !used || !redstoneWireSupported(tx, pos) {
 		return false
 	}
-	place(tx, pos, r, user, ctx)
+	place(tx, pos, r.DeriveState(pos, tx), user, ctx)
 	return placed(ctx)
 }
 
@@ -86,7 +88,19 @@ func (r RedstoneWire) RedstonePowerUpdate(_ cube.Pos, _ *world.Tx, power int) (w
 func (r RedstoneWire) NeighbourUpdateTick(pos, _ cube.Pos, tx *world.Tx) {
 	if !redstoneWireSupported(tx, pos) {
 		breakBlock(r, pos, tx)
+		return
 	}
+	if derived := r.DeriveState(pos, tx).(RedstoneWire); derived != r {
+		// The connections only change how the wire looks, so neither neighbours nor the redstone network are
+		// updated for them.
+		tx.SetBlock(pos, derived, &world.SetOpts{DisableBlockUpdates: true, DisableRedstoneUpdates: true})
+	}
+}
+
+// DeriveState ...
+func (r RedstoneWire) DeriveState(pos cube.Pos, src world.BlockSource) world.Block {
+	r.North, r.East, r.South, r.West = redstoneWireConnections(pos, src)
+	return r
 }
 
 func (RedstoneWire) HasLiquidDrops() bool {
@@ -102,7 +116,13 @@ func (RedstoneWire) SideClosed(cube.Pos, cube.Pos, *world.Tx) bool {
 }
 
 func (r RedstoneWire) EncodeBlock() (string, map[string]any) {
-	return "minecraft:redstone_wire", map[string]any{"redstone_signal": int32(world.ClampRedstonePower(r.Power))}
+	return "minecraft:redstone_wire", map[string]any{
+		"redstone_signal": int32(world.ClampRedstonePower(r.Power)),
+		"redstone_north":  r.North.String(),
+		"redstone_east":   r.East.String(),
+		"redstone_south":  r.South.String(),
+		"redstone_west":   r.West.String(),
+	}
 }
 
 func (RedstoneWire) EncodeItem() (name string, meta int16) {
@@ -120,8 +140,17 @@ func (RedstoneWire) MaterialColour() string {
 }
 
 func allRedstoneWires() (all []world.Block) {
+	connections := RedstoneWireConnections()
 	for i := range 16 {
-		all = append(all, RedstoneWire{Power: i})
+		for _, n := range connections {
+			for _, e := range connections {
+				for _, s := range connections {
+					for _, w := range connections {
+						all = append(all, RedstoneWire{Power: i, North: n, East: e, South: s, West: w})
+					}
+				}
+			}
+		}
 	}
 	return
 }
