@@ -24,6 +24,11 @@ type Fire struct {
 	// Age affects how fire extinguishes. Newly placed fire starts at 0 and the value has a 1/3 chance of incrementing
 	// each block tick.
 	Age int
+	// Connections holds the horizontal sides of the fire that burn against a flammable block. Soul fire never
+	// has any.
+	Connections Connections
+	// Up is true if the block above the fire is flammable. It is always false for soul fire.
+	Up bool
 }
 
 // flammableBlock returns true if a block is flammable.
@@ -189,6 +194,7 @@ func (f Fire) spread(from, to cube.Pos, tx *world.Tx, r *rand.Rand) {
 	if spread.Type == NormalFire() && portal.ActivateNetherPortal(tx, to) {
 		return
 	}
+	spread = spread.DeriveState(to, tx).(Fire)
 	tx.SetBlock(to, spread, nil)
 	tx.ScheduleBlockUpdate(to, spread, time.Duration(30+r.IntN(10))*time.Second/20)
 }
@@ -225,10 +231,12 @@ func (f Fire) NeighbourUpdateTick(pos, changedNeighbour cube.Pos, tx *world.Tx) 
 	switch below.(type) {
 	case SoulSand, SoulSoil:
 		f.Type = SoulFire()
-		tx.SetBlock(pos, f, nil)
+		tx.SetBlock(pos, f.DeriveState(pos, tx), nil)
+		return
 	case Water:
 		if changedNeighbour == pos {
 			tx.SetBlock(pos, nil, nil)
+			return
 		}
 	default:
 		if f.Type == SoulFire() {
@@ -236,6 +244,26 @@ func (f Fire) NeighbourUpdateTick(pos, changedNeighbour cube.Pos, tx *world.Tx) 
 			return
 		}
 	}
+	if derived := f.DeriveState(pos, tx).(Fire); derived != f {
+		// The connections only change how the fire looks, so the neighbours are not updated for them.
+		tx.SetBlock(pos, derived, &world.SetOpts{DisableBlockUpdates: true})
+	}
+}
+
+// DeriveState ...
+func (f Fire) DeriveState(pos cube.Pos, src world.BlockSource) world.Block {
+	if f.Type != NormalFire() {
+		f.Connections, f.Up = Connections{}, false
+		return f
+	}
+	f.Connections = Connections{
+		north: flammableBlock(src.Block(pos.Side(cube.FaceNorth))),
+		east:  flammableBlock(src.Block(pos.Side(cube.FaceEast))),
+		south: flammableBlock(src.Block(pos.Side(cube.FaceSouth))),
+		west:  flammableBlock(src.Block(pos.Side(cube.FaceWest))),
+	}
+	f.Up = flammableBlock(src.Block(pos.Side(cube.FaceUp)))
+	return f
 }
 
 // HasLiquidDrops ...
@@ -257,7 +285,10 @@ func (f Fire) LightEmissionLevel() uint8 {
 func (f Fire) EncodeBlock() (name string, properties map[string]any) {
 	switch f.Type {
 	case NormalFire():
-		return "minecraft:fire", map[string]any{"age": int32(f.Age)}
+		properties = f.Connections.properties()
+		properties["age"] = int32(f.Age)
+		properties["minecraft:connection_up"] = f.Up
+		return "minecraft:fire", properties
 	case SoulFire():
 		return "minecraft:soul_fire", map[string]any{"age": int32(f.Age)}
 	}
@@ -277,7 +308,7 @@ func (f Fire) Start(tx *world.Tx, pos cube.Pos) {
 			if portal.ActivateNetherPortal(tx, pos) {
 				return
 			}
-			f := Fire{}
+			f := Fire{}.DeriveState(pos, tx)
 			tx.SetBlock(pos, f, nil)
 			tx.ScheduleBlockUpdate(pos, f, time.Duration(30+rand.IntN(10))*time.Second/20)
 		}
@@ -287,7 +318,10 @@ func (f Fire) Start(tx *world.Tx, pos cube.Pos) {
 // allFire ...
 func allFire() (b []world.Block) {
 	for i := 0; i < 16; i++ {
-		b = append(b, Fire{Age: i, Type: NormalFire()})
+		for _, c := range allConnections() {
+			b = append(b, Fire{Age: i, Type: NormalFire(), Connections: c})
+			b = append(b, Fire{Age: i, Type: NormalFire(), Connections: c, Up: true})
+		}
 		b = append(b, Fire{Age: i, Type: SoulFire()})
 	}
 	return
